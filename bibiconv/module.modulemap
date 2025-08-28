@@ -1,0 +1,9 @@
+framework module bibiconv {
+    header "bibiconv.h"
+    header "cfeatures.h"
+    header "cstderrno.h"
+    header "chartypes.h"
+    header "codetable.h"
+    header "marc8_tables.h"
+    export *
+}

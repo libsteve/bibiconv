@@ -1,0 +1,24 @@
+{
+  "configurations" : [
+    {
+      "id" : "86CB9DEF-AE12-41CE-A283-43E75F764B8E",
+      "name" : "Configuration 1",
+      "options" : {
+
+      }
+    }
+  ],
+  "defaultOptions" : {
+
+  },
+  "testTargets" : [
+    {
+      "target" : {
+        "containerPath" : "container:bibiconv.xcodeproj",
+        "identifier" : "AA2EEECA2D7B58E100521AD4",
+        "name" : "bibiconv_tests"
+      }
+    }
+  ],
+  "version" : 1
+}
