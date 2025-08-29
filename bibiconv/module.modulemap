@@ -4,6 +4,7 @@ framework module bibiconv {
     header "cstderrno.h"
     header "chartypes.h"
     header "codetable.h"
+    header "codespace.h"
     header "marc8_tables.h"
     export *
 }

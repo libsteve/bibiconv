@@ -25,6 +25,8 @@
 		AA52CE722D7E70CB0003866A /* utf8_coding.c in Sources */ = {isa = PBXBuildFile; fileRef = AA52CE712D7E70C60003866A /* utf8_coding.c */; };
 		AA52CE762D81F1860003866A /* utf16_coding.c in Sources */ = {isa = PBXBuildFile; fileRef = AA52CE752D81F1860003866A /* utf16_coding.c */; };
 		AA52CE782D81FA3E0003866A /* utf32_coding.c in Sources */ = {isa = PBXBuildFile; fileRef = AA52CE772D81FA3E0003866A /* utf32_coding.c */; };
+		AAA9F7DA2E62322800122852 /* codespace.h in Headers */ = {isa = PBXBuildFile; fileRef = AAA9F7D92E62322800122852 /* codespace.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		AAA9F7DC2E623E4500122852 /* codespace.c in Sources */ = {isa = PBXBuildFile; fileRef = AAA9F7DB2E623E4200122852 /* codespace.c */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -62,6 +64,8 @@
 		AA52CE772D81FA3E0003866A /* utf32_coding.c */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.c; path = utf32_coding.c; sourceTree = "<group>"; };
 		AAA9F7D72E62303100122852 /* LICENSE */ = {isa = PBXFileReference; lastKnownFileType = text; path = LICENSE; sourceTree = "<group>"; };
 		AAA9F7D82E62303100122852 /* README.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
+		AAA9F7D92E62322800122852 /* codespace.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = codespace.h; sourceTree = "<group>"; };
+		AAA9F7DB2E623E4200122852 /* codespace.c */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.c; path = codespace.c; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +98,8 @@
 				AA2EEE932D7B57F000521AD4 /* chartypes.h */,
 				AA2EEE942D7B57F000521AD4 /* codetable.h */,
 				AA2EEE952D7B57F000521AD4 /* codetable.c */,
+				AAA9F7D92E62322800122852 /* codespace.h */,
+				AAA9F7DB2E623E4200122852 /* codespace.c */,
 				AA52CE6F2D7E69030003866A /* iconv_coding.h */,
 				AA52CE712D7E70C60003866A /* utf8_coding.c */,
 				AA52CE752D81F1860003866A /* utf16_coding.c */,
@@ -160,6 +166,7 @@
 				AA2EEF0C2D7B59A700521AD4 /* marc8_tables.h in Headers */,
 				AA2EEF0E2D7B59A700521AD4 /* bibiconv.h in Headers */,
 				AA2EEF0F2D7B59A700521AD4 /* cfeatures.h in Headers */,
+				AAA9F7DA2E62322800122852 /* codespace.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -270,6 +277,7 @@
 				AA52CE722D7E70CB0003866A /* utf8_coding.c in Sources */,
 				AA0E77582E600728004F2F41 /* Documentation.docc in Sources */,
 				AA52CE762D81F1860003866A /* utf16_coding.c in Sources */,
+				AAA9F7DC2E623E4500122852 /* codespace.c in Sources */,
 				AA52CE782D81FA3E0003866A /* utf32_coding.c in Sources */,
 				AA2EEF132D7B59A700521AD4 /* marc8_tables.c in Sources */,
 				AA2EEF142D7B59A700521AD4 /* marc8_decoding.c in Sources */,
