@@ -6,6 +6,7 @@
 #ifndef BIB_ICONV_CODING_H
 #define BIB_ICONV_CODING_H
 
+#include <stddef.h>
 #include <bibiconv/cfeatures.h>
 #include <bibiconv/chartypes.h>
 

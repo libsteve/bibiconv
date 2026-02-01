@@ -7,6 +7,7 @@
 #define BIBICONV_CODESPACE_H
 
 #include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
 #include <bibiconv/cfeatures.h>
 #include <bibiconv/chartypes.h>

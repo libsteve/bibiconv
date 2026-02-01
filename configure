@@ -1,0 +1,587 @@
+#!/bin/sh
+#
+# configure
+# ---------
+# Minimal configure script for bibiconv (POSIX sh).
+#
+# What it does:
+#   1) Reads options and VAR=VALUE overrides.
+#   2) Detects host OS (POSIX vs MSYS2/MinGW/Cygwin).
+#   3) Picks defaults (prefix, shared library flags, PIC, soname style).
+#   4) Probes compiler support for -std=... (optional).
+#   5) Enumerates sources and writes explicit object build rules.
+#   6) Generates build metadata (pkg-config + CMake package files).
+#   7) Substitutes values into Makefile.in to produce Makefile.
+#
+# Requirements:
+#   - POSIX sh, sed, awk, mkdir, rm, uname
+#   - A working C compiler for probing (disable with --disable-std-probe)
+#
+# Notes:
+#   - This script targets POSIX shells. On Windows, use MSYS2/Cygwin.
+#   - Pure cmd.exe/PowerShell + MSVC is not supported by this script.
+
+set -eu
+
+# ---------------------------------------------------------------------------
+# Defaults
+# ---------------------------------------------------------------------------
+
+prefix=""
+build_dir="build"
+version="0.1.0"
+soversion=""
+libname="bibiconv"
+
+enable_std_probe=1
+enable_soname=1
+enable_pic=1
+
+# ---------------------------------------------------------------------------
+# Usage
+# ---------------------------------------------------------------------------
+
+usage() {
+  cat <<EOF
+Usage: ./configure [OPTIONS] [VAR=VALUE ...]
+
+Options:
+  --prefix=PATH        Install prefix.
+                       Default: /usr/local on POSIX; on MSYS2/MinGW prefers
+                       %LOCALAPPDATA%/Programs/<libname> if available.
+  --build-dir=DIR      Build directory (default: build)
+  --version=X.Y.Z      Library version used for metadata (default: ${version})
+  --soversion=N        ABI version used for ELF soname (default: X from X.Y.Z)
+  --libname=NAME       Library base name (default: ${libname})
+  --disable-std-probe  Do not probe compiler; use CSTD_FLAG as-is
+  --disable-soname     Do not build/install versioned ELF sonames/symlinks
+  --disable-pic        Do not add -fPIC on non-Windows
+  --help               Show this help
+
+Variables (set in environment or as VAR=VALUE on the command line):
+  CC       C compiler command.
+           Example: CC=clang
+  AR       Static library archiver.
+           Example: AR=ar
+  RANLIB   Static library indexer (or ':' to disable).
+           Example: RANLIB=ranlib
+  INSTALL  File installation tool.
+           Example: INSTALL=install
+
+  CPPFLAGS C preprocessor flags (e.g., -I..., -D...).
+  CFLAGS   C compiler flags (e.g., -O2, -g, -Wall...).
+  LDFLAGS  Linker flags for building the shared library.
+  LDLIBS   Extra libraries to link against (e.g., -lm).
+
+  CSTD_FLAG  C language standard flag to use (overrides probing).
+             Example: CSTD_FLAG=-std=c17
+EOF
+}
+
+# ---------------------------------------------------------------------------
+# Command-line VAR=VALUE support
+# ---------------------------------------------------------------------------
+#
+# We allow limited VAR=VALUE assignments on the command line. This makes it
+# possible to do:
+#   ./configure CC=clang CFLAGS='-O2 -g'
+#
+# For POSIX sh, applying these safely is annoying. We restrict variable names
+# and single-quote values before eval.
+
+set_var_kv() {
+  kv=$1
+  var=${kv%%=*}
+  val=${kv#*=}
+
+  case "$var" in
+    [A-Za-z_][A-Za-z0-9_]*)
+      ;;
+    *)
+      echo "configure: error: invalid variable name in '$kv'" >&2
+      exit 2
+      ;;
+  esac
+
+  # Quote single quotes so eval is safe for arbitrary values.
+  sq=$(printf "%s" "$val" | sed "s/'/'\\\\''/g")
+  eval "$var='$sq'"
+}
+
+# ---------------------------------------------------------------------------
+# Parse options
+# ---------------------------------------------------------------------------
+
+for arg in "$@"; do
+  case "$arg" in
+    --help)
+      usage
+      exit 0
+      ;;
+    --prefix=*)
+      prefix=${arg#*=}
+      ;;
+    --build-dir=*)
+      build_dir=${arg#*=}
+      ;;
+    --version=*)
+      version=${arg#*=}
+      ;;
+    --soversion=*)
+      soversion=${arg#*=}
+      ;;
+    --libname=*)
+      libname=${arg#*=}
+      ;;
+    --disable-std-probe)
+      enable_std_probe=0
+      ;;
+    --disable-soname)
+      enable_soname=0
+      ;;
+    --disable-pic)
+      enable_pic=0
+      ;;
+    *=*)
+      set_var_kv "$arg"
+      ;;
+    *)
+      echo "configure: error: unknown option: $arg" >&2
+      echo "configure: try --help" >&2
+      exit 2
+      ;;
+  esac
+done
+
+# ---------------------------------------------------------------------------
+# Pull tool/flag vars from environment or defaults
+# ---------------------------------------------------------------------------
+
+: "${LIBNAME:=$libname}"
+: "${CC:=cc}"
+: "${AR:=ar}"
+: "${RANLIB:=ranlib}"
+: "${INSTALL:=install}"
+
+: "${CPPFLAGS:=}"
+: "${CFLAGS:=}"
+: "${LDFLAGS:=}"
+: "${LDLIBS:=}"
+
+# If the user didn't specify CFLAGS, choose a reasonable default.
+if [ -z "$CFLAGS" ]; then
+  CFLAGS="-O2"
+fi
+
+# If soversion isn't set, default to X from X.Y.Z.
+if [ -z "$soversion" ]; then
+  case "$version" in
+    *.*.*)
+      soversion=${version%%.*}
+      ;;
+    *)
+      soversion=0
+      ;;
+  esac
+fi
+
+# ---------------------------------------------------------------------------
+# Host OS detection
+# ---------------------------------------------------------------------------
+#
+# uname -s returns strings like:
+#   Darwin, Linux, FreeBSD
+#   MINGW64_NT-..., MSYS_NT-..., CYGWIN_NT-...
+
+host_os="linux"
+uname_s=$(uname -s 2>/dev/null || echo unknown)
+case "$uname_s" in
+  Darwin)
+    host_os="macos"
+    ;;
+  MINGW*|MSYS*|CYGWIN*)
+    host_os="windows"
+    ;;
+  FreeBSD|OpenBSD|NetBSD)
+    host_os="bsd"
+    ;;
+  *)
+    host_os="linux"
+    ;;
+esac
+
+# ---------------------------------------------------------------------------
+# Default prefix selection
+# ---------------------------------------------------------------------------
+#
+# On Windows-like shells, prefer a per-user prefix when LOCALAPPDATA is set.
+# We also normalize backslashes so paths behave in MSYS2.
+
+if [ -z "$prefix" ]; then
+  if [ "$host_os" = "windows" ]; then
+    if [ "${LOCALAPPDATA:-}" != "" ]; then
+      la=$(printf '%s' "$LOCALAPPDATA" | tr '\\' '/')
+      prefix="$la/Programs/$LIBNAME"
+    elif [ "${PROGRAMFILES:-}" != "" ]; then
+      pf=$(printf '%s' "$PROGRAMFILES" | tr '\\' '/')
+      prefix="$pf/$LIBNAME"
+    else
+      prefix="C:/$LIBNAME"
+    fi
+  else
+    prefix="/usr/local"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# Select install command behavior
+# ---------------------------------------------------------------------------
+#
+# If install(1) exists, we use it for permissions. Otherwise fall back to cp.
+
+if command -v "$INSTALL" >/dev/null 2>&1; then
+  install_data="$INSTALL -m 644"
+  install_program="$INSTALL -m 755"
+else
+  install_data="cp -f"
+  install_program="cp -f"
+fi
+
+# ---------------------------------------------------------------------------
+# Temporary directory and cleanup
+# ---------------------------------------------------------------------------
+
+tmpdir="${TMPDIR:-/tmp}/bibiconv-configure.$$"
+trap 'rm -rf "$tmpdir"' EXIT INT HUP TERM
+mkdir -p "$tmpdir"
+
+# ---------------------------------------------------------------------------
+# Compiler probing
+# ---------------------------------------------------------------------------
+#
+# We compile a tiny program with different -std= flags.
+# If probing is disabled, we keep whatever CSTD_FLAG is already set to.
+
+try_cc_flag() {
+  flag=$1
+  cat >"$tmpdir/conftest.c" <<'EOF'
+int main(void) { return 0; }
+EOF
+  "$CC" $CPPFLAGS $CFLAGS "$flag" -c "$tmpdir/conftest.c" \
+    -o "$tmpdir/conftest.o" >/dev/null 2>&1
+}
+
+: "${CSTD_FLAG:=-std=c23}"
+if [ $enable_std_probe -eq 1 ]; then
+  if try_cc_flag "-std=c23"; then
+    CSTD_FLAG="-std=c23"
+  elif try_cc_flag "-std=c2x"; then
+    CSTD_FLAG="-std=c2x"
+  elif try_cc_flag "-std=c17"; then
+    CSTD_FLAG="-std=c17"
+  elif try_cc_flag "-std=c11"; then
+    CSTD_FLAG="-std=c11"
+  fi
+fi
+
+# PIC: usually required for ELF shared objects; typically harmless elsewhere.
+# Disable via --disable-pic.
+picflags=""
+if [ $enable_pic -eq 1 ] && [ "$host_os" != "windows" ]; then
+  picflags="-fPIC"
+fi
+
+# ---------------------------------------------------------------------------
+# Library naming and platform-specific link flags
+# ---------------------------------------------------------------------------
+
+static_lib="$build_dir/lib$LIBNAME.a"
+implib=""
+
+shlibext="so"
+shldflags="-shared"
+soname_ldflags=""
+
+shared_real=""
+shared_soname=""
+shared_link=""
+
+case "$host_os" in
+  macos)
+    shlibext="dylib"
+    shared_real="$build_dir/lib$LIBNAME.$shlibext"
+    shared_link="$shared_real"
+    shared_soname=""
+
+    shldflags="-dynamiclib"
+    shldflags="$shldflags -Wl,-install_name,@rpath/lib$LIBNAME.$shlibext"
+    shldflags="$shldflags -Wl,-current_version,$version"
+    shldflags="$shldflags -Wl,-compatibility_version,$soversion"
+    ;;
+
+  windows)
+    shlibext="dll"
+    shared_real="$build_dir/$LIBNAME.$shlibext"
+    shared_link="$shared_real"
+    shared_soname=""
+
+    implib="$build_dir/lib$LIBNAME.dll.a"
+    shldflags="-shared -Wl,--out-implib,$implib"
+    shldflags="$shldflags -Wl,--export-all-symbols"
+    soname_ldflags=""
+    ;;
+
+  *)
+    shlibext="so"
+
+    if [ $enable_soname -eq 1 ]; then
+      shared_real="$build_dir/lib$LIBNAME.$shlibext.$version"
+      shared_soname="$build_dir/lib$LIBNAME.$shlibext.$soversion"
+      shared_link="$build_dir/lib$LIBNAME.$shlibext"
+
+      soname_ldflags="-Wl,-soname,lib$LIBNAME.$shlibext.$soversion"
+    else
+      shared_real="$build_dir/lib$LIBNAME.$shlibext"
+      shared_link="$shared_real"
+      shared_soname=""
+      soname_ldflags=""
+    fi
+
+    shldflags="-shared"
+    ;;
+ esac
+
+# ---------------------------------------------------------------------------
+# Install directories
+# ---------------------------------------------------------------------------
+
+includedir="$prefix/include/$LIBNAME"
+libdir="$prefix/lib"
+bindir="$prefix/bin"
+
+pkgconfigdir="$libdir/pkgconfig"
+cmakedir="$libdir/cmake/$LIBNAME"
+
+# Runtime shared library location.
+# On Windows, the runtime DLL belongs in bin.
+shlibdir="$libdir"
+if [ "$host_os" = "windows" ]; then
+  shlibdir="$bindir"
+fi
+
+# ---------------------------------------------------------------------------
+# Enumerate sources/headers and generate explicit object rules
+# ---------------------------------------------------------------------------
+
+srcs=""
+for f in "$LIBNAME"/*.c; do
+  if [ -f "$f" ]; then
+    srcs="$srcs $f"
+  fi
+done
+
+headers=""
+for h in "$LIBNAME"/*.h; do
+  if [ -f "$h" ]; then
+    headers="$headers $h"
+  fi
+done
+
+if [ -z "$srcs" ]; then
+  echo "configure: error: no sources found at $LIBNAME/*.c" >&2
+  exit 1
+fi
+
+objs=""
+compile_rules_file="$tmpdir/compile.rules"
+: >"$compile_rules_file"
+
+for s in $srcs; do
+  case "$s" in
+    ./*) s=${s#./} ;;
+  esac
+
+  o="$build_dir/$s"
+  o=${o%.c}.o
+  objs="$objs $o"
+
+  odir=$(dirname "$o")
+
+  cat >>"$compile_rules_file" <<EOF
+$o: $s
+	@mkdir -p "$odir"
+	\$(CC) \$(CPPFLAGS) \$(CFLAGS) \$(CSTD_FLAG) \$(PICFLAGS) \
+		-I"." -I"$LIBNAME" -c "\$<" -o "\$@"
+EOF
+
+done
+
+# ---------------------------------------------------------------------------
+# Generate build metadata: pkg-config and CMake package files
+# ---------------------------------------------------------------------------
+
+mkdir -p "$build_dir/pkgconfig" "$build_dir/cmake/$LIBNAME"
+
+pcfile="$build_dir/pkgconfig/$LIBNAME.pc"
+cat >"$pcfile" <<EOF
+prefix=$prefix
+exec_prefix=\${prefix}
+libdir=\${exec_prefix}/lib
+includedir=\${prefix}/include
+
+Name: $LIBNAME
+Description: $LIBNAME library
+Version: $version
+Libs: -L\${libdir} -l$LIBNAME
+Cflags: -I\${includedir}
+EOF
+
+cmake_config="$build_dir/cmake/$LIBNAME/${LIBNAME}Config.cmake"
+cmake_version="$build_dir/cmake/$LIBNAME/${LIBNAME}ConfigVersion.cmake"
+cmake_targets="$build_dir/cmake/$LIBNAME/${LIBNAME}Targets.cmake"
+
+cat >"$cmake_config" <<'EOF'
+# Generated by configure.
+# Defines imported target: bibiconv::bibiconv
+
+include("${CMAKE_CURRENT_LIST_DIR}/bibiconvTargets.cmake")
+EOF
+
+cat >"$cmake_targets" <<'EOF'
+# Generated by configure.
+
+get_filename_component(_BIBICONV_PREFIX
+  "${CMAKE_CURRENT_LIST_DIR}/../.." ABSOLUTE)
+
+set(_BIBICONV_INCLUDEDIR "${_BIBICONV_PREFIX}/include")
+set(_BIBICONV_LIBDIR "${_BIBICONV_PREFIX}/lib")
+set(_BIBICONV_BINDIR "${_BIBICONV_PREFIX}/bin")
+
+if(NOT TARGET bibiconv::bibiconv)
+  if(WIN32)
+    add_library(bibiconv::bibiconv SHARED IMPORTED)
+    set_target_properties(bibiconv::bibiconv PROPERTIES
+      IMPORTED_LOCATION "${_BIBICONV_BINDIR}/bibiconv.dll"
+      IMPORTED_IMPLIB   "${_BIBICONV_LIBDIR}/libbibiconv.dll.a"
+      INTERFACE_INCLUDE_DIRECTORIES "${_BIBICONV_INCLUDEDIR}"
+    )
+  elseif(APPLE)
+    add_library(bibiconv::bibiconv SHARED IMPORTED)
+    set_target_properties(bibiconv::bibiconv PROPERTIES
+      IMPORTED_LOCATION "${_BIBICONV_LIBDIR}/libbibiconv.dylib"
+      INTERFACE_INCLUDE_DIRECTORIES "${_BIBICONV_INCLUDEDIR}"
+    )
+  else()
+    add_library(bibiconv::bibiconv SHARED IMPORTED)
+    set_target_properties(bibiconv::bibiconv PROPERTIES
+      IMPORTED_LOCATION "${_BIBICONV_LIBDIR}/libbibiconv.so"
+      INTERFACE_INCLUDE_DIRECTORIES "${_BIBICONV_INCLUDEDIR}"
+    )
+  endif()
+endif()
+EOF
+
+cat >"$cmake_version" <<EOF
+# Generated by configure.
+
+set(PACKAGE_VERSION "$version")
+
+if(PACKAGE_FIND_VERSION)
+  if(PACKAGE_FIND_VERSION VERSION_GREATER PACKAGE_VERSION)
+    set(PACKAGE_VERSION_COMPATIBLE FALSE)
+  else()
+    set(PACKAGE_VERSION_COMPATIBLE TRUE)
+    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)
+      set(PACKAGE_VERSION_EXACT TRUE)
+    endif()
+  endif()
+endif()
+EOF
+
+# ---------------------------------------------------------------------------
+# Substitute Makefile.in -> Makefile
+# ---------------------------------------------------------------------------
+#
+# We do simple @TOKEN@ substitutions with sed, then splice in the generated
+# compile rules where @COMPILE_RULES@ appears.
+
+esc() {
+  printf '%s' "$1" | sed 's/[\\&]/\\&/g'
+}
+
+subst_tmp="$tmpdir/Makefile.subst"
+
+sed \
+  -e "s|@LIBNAME@|$(esc "$LIBNAME")|g" \
+  -e "s|@BUILD_DIR@|$(esc "$build_dir")|g" \
+  -e "s|@CC@|$(esc "$CC")|g" \
+  -e "s|@AR@|$(esc "$AR")|g" \
+  -e "s|@RANLIB@|$(esc "$RANLIB")|g" \
+  -e "s|@INSTALL@|$(esc "$INSTALL")|g" \
+  -e "s|@CPPFLAGS@|$(esc "$CPPFLAGS")|g" \
+  -e "s|@CFLAGS@|$(esc "$CFLAGS")|g" \
+  -e "s|@CSTD_FLAG@|$(esc "$CSTD_FLAG")|g" \
+  -e "s|@PICFLAGS@|$(esc "$picflags")|g" \
+  -e "s|@LDFLAGS@|$(esc "$LDFLAGS")|g" \
+  -e "s|@LDLIBS@|$(esc "$LDLIBS")|g" \
+  -e "s|@STATIC_LIB@|$(esc "$static_lib")|g" \
+  -e "s|@IMPLIB@|$(esc "$implib")|g" \
+  -e "s|@SHARED_REAL@|$(esc "$shared_real")|g" \
+  -e "s|@SHARED_SONAME@|$(esc "$shared_soname")|g" \
+  -e "s|@SHARED_LINK@|$(esc "$shared_link")|g" \
+  -e "s|@SHLDFLAGS@|$(esc "$shldflags")|g" \
+  -e "s|@SONAME_LDFLAGS@|$(esc "$soname_ldflags")|g" \
+  -e "s|@PREFIX@|$(esc "$prefix")|g" \
+  -e "s|@INCLUDEDIR@|$(esc "$includedir")|g" \
+  -e "s|@LIBDIR@|$(esc "$libdir")|g" \
+  -e "s|@BINDIR@|$(esc "$bindir")|g" \
+  -e "s|@SHLIBDIR@|$(esc "$shlibdir")|g" \
+  -e "s|@PKGCONFIGDIR@|$(esc "$pkgconfigdir")|g" \
+  -e "s|@CMAKEDIR@|$(esc "$cmakedir")|g" \
+  -e "s|@PCFILE@|$(esc "$pcfile")|g" \
+  -e "s|@CMAKE_CONFIG@|$(esc "$cmake_config")|g" \
+  -e "s|@CMAKE_VERSION@|$(esc "$cmake_version")|g" \
+  -e "s|@CMAKE_TARGETS@|$(esc "$cmake_targets")|g" \
+  -e "s|@INSTALL_DATA@|$(esc "$install_data")|g" \
+  -e "s|@INSTALL_PROGRAM@|$(esc "$install_program")|g" \
+  -e "s|@HEADERS@|$(esc "$headers")|g" \
+  -e "s|@OBJS@|$(esc "$objs")|g" \
+  Makefile.in >"$subst_tmp"
+
+awk -v rules="$compile_rules_file" '
+  /@COMPILE_RULES@/ {
+    while ((getline l < rules) > 0) {
+      print l
+    }
+    close(rules)
+    next
+  }
+  { print }
+' "$subst_tmp" > Makefile
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
+
+cat <<EOF
+Configuration:
+  host_os:       $host_os ($uname_s)
+  prefix:        $prefix
+  build_dir:     $build_dir
+  version:       $version
+  soversion:     $soversion
+  CC:            $CC
+  CSTD_FLAG:     $CSTD_FLAG
+  CFLAGS:        $CFLAGS
+  static:        $static_lib
+  shared_real:   $shared_real
+  shared_link:   $shared_link
+  pkg-config:    $pcfile
+  cmake dir:     $build_dir/cmake/$LIBNAME
+EOF
+
+if [ "$implib" != "" ]; then
+  echo "  implib:        $implib"
+fi
+
+exit 0

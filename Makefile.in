@@ -1,0 +1,254 @@
+# Template Makefile.
+#
+# The configure script substitutes @TOKENS@ and writes a concrete Makefile.
+# The generated Makefile is intended to be friendly to "regular" make:
+#   - Avoids GNU make functions like $(wildcard), $(patsubst), $(shell), etc.
+#   - Explicit object rules are inserted at COMPILE_RULES
+#
+# Build structure:
+#   - Objects live under $(BUILD_DIR)/<src path>.o
+#   - Static library is built with $(AR) (and optionally $(RANLIB))
+#   - Shared library (or DLL) is linked with $(CC)
+#   - Optional ELF outputs:
+#       SHARED_REAL   libfoo.so.X.Y.Z (real file)
+#       SHARED_SONAME libfoo.so.X     (soname symlink)
+#       SHARED_LINK   libfoo.so       (linker-name symlink)
+#
+# Important:
+#   On macOS (and some other setups), SHARED_LINK == SHARED_REAL.
+#   Defining separate make rules for both names would create duplicate target
+#   rules and cause "overriding commands" warnings.
+#
+#   To avoid that, we only define a build rule for $(SHARED_REAL). Symlink
+#   creation is done in the phony 'shared' target when SHARED_SONAME is set.
+#
+# Install layout:
+#   - Headers:     $(INCLUDEDIR) (typically $(PREFIX)/include/$(LIBNAME))
+#   - Static lib:  $(LIBDIR)
+#   - Import lib:  $(LIBDIR)      (Windows MinGW)
+#   - Shared lib:  $(SHLIBDIR)    (DLLs go to bin on Windows)
+#   - pkg-config:  $(PKGCONFIGDIR)
+#   - CMake pkg:   $(CMAKEDIR)
+#
+# Staging:
+#   DESTDIR is used by packagers to stage into a temporary root.
+#   Example:
+#     make install DESTDIR=/tmp/pkgroot
+#   That installs into:
+#     /tmp/pkgroot$(PREFIX)/...
+
+# ---------------------------------------------------------------------------
+# Substituted settings
+# ---------------------------------------------------------------------------
+
+LIBNAME       = @LIBNAME@
+BUILD_DIR     = @BUILD_DIR@
+
+CC            = @CC@
+AR            = @AR@
+RANLIB        = @RANLIB@
+INSTALL       = @INSTALL@
+
+CPPFLAGS      = @CPPFLAGS@
+CFLAGS        = @CFLAGS@
+CSTD_FLAG     = @CSTD_FLAG@
+PICFLAGS      = @PICFLAGS@
+
+LDFLAGS       = @LDFLAGS@
+LDLIBS        = @LDLIBS@
+
+STATIC_LIB    = @STATIC_LIB@
+IMPLIB        = @IMPLIB@
+
+# Shared library naming:
+#   SHARED_REAL   - the actual built file
+#   SHARED_SONAME - the ABI symlink name on ELF (may be empty)
+#   SHARED_LINK   - the link name used by -l (may be same as real)
+SHARED_REAL   = @SHARED_REAL@
+SHARED_SONAME = @SHARED_SONAME@
+SHARED_LINK   = @SHARED_LINK@
+
+# Platform-specific shared link flags:
+#   - macOS:   -dynamiclib + install_name + version metadata
+#   - Windows: -shared + out-implib + export-all-symbols
+#   - ELF:     -shared plus SONAME_LDFLAGS
+SHLDFLAGS      = @SHLDFLAGS@
+SONAME_LDFLAGS = @SONAME_LDFLAGS@
+
+PREFIX        = @PREFIX@
+INCLUDEDIR    = @INCLUDEDIR@
+LIBDIR        = @LIBDIR@
+BINDIR        = @BINDIR@
+SHLIBDIR      = @SHLIBDIR@
+
+PKGCONFIGDIR  = @PKGCONFIGDIR@
+CMAKEDIR      = @CMAKEDIR@
+
+PCFILE        = @PCFILE@
+CMAKE_CONFIG  = @CMAKE_CONFIG@
+CMAKE_VERSION = @CMAKE_VERSION@
+CMAKE_TARGETS = @CMAKE_TARGETS@
+
+# ---------------------------------------------------------------------------
+# User-overridable settings
+# ---------------------------------------------------------------------------
+
+# Staging root for packaging.
+# Leave empty for normal installs.
+DESTDIR       =
+
+# Install command variants (chosen by configure).
+INSTALL_DATA    = @INSTALL_DATA@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+
+# Enumerated inputs from configure.
+HEADERS       = @HEADERS@
+OBJS          = @OBJS@
+
+# ---------------------------------------------------------------------------
+# Phony targets
+# ---------------------------------------------------------------------------
+
+.PHONY: all static shared install install-headers install-libs install-pc \
+        install-cmake uninstall uninstall-headers uninstall-libs \
+        uninstall-pc uninstall-cmake clean distclean
+
+# Default: build both static and shared libraries.
+all: static shared
+
+# Build the static archive.
+static: $(STATIC_LIB)
+
+# Build the shared library.
+# Symlinks (ELF) are created here so we don't define a duplicate file target.
+shared: $(SHARED_REAL)
+	@if [ "$(SHARED_SONAME)" != "" ]; then \
+		shared_soname="$(SHARED_SONAME)"; \
+		shared_real="$(SHARED_REAL)"; \
+		shared_link="$(SHARED_LINK)"; \
+		( cd "$(BUILD_DIR)" && \
+		  ln -sf "$${shared_real##*/}" "$${shared_soname##*/}" && \
+		  ln -sf "$${shared_soname##*/}" "$${shared_link##*/}" ); \
+	fi
+
+# Aggregate install/uninstall.
+install: install-headers install-libs install-pc install-cmake
+
+uninstall: uninstall-cmake uninstall-pc uninstall-libs uninstall-headers
+
+# ---------------------------------------------------------------------------
+# Install rules
+# ---------------------------------------------------------------------------
+
+install-headers:
+	@mkdir -p "$(DESTDIR)$(INCLUDEDIR)"
+	@for h in $(HEADERS); do \
+		b=$${h##*/}; \
+		$(INSTALL_DATA) "$$h" "$(DESTDIR)$(INCLUDEDIR)/$$b"; \
+	done
+
+install-libs: static shared
+	@mkdir -p "$(DESTDIR)$(LIBDIR)" "$(DESTDIR)$(SHLIBDIR)"
+
+	# Static library always installs to LIBDIR.
+	$(INSTALL_DATA) "$(STATIC_LIB)" "$(DESTDIR)$(LIBDIR)"
+
+	# Import library is present only on MinGW-style Windows builds.
+	@if [ "$(IMPLIB)" != "" ]; then \
+		$(INSTALL_DATA) "$(IMPLIB)" "$(DESTDIR)$(LIBDIR)"; \
+	fi
+
+	# Install the real shared library (or DLL) to SHLIBDIR.
+	$(INSTALL_PROGRAM) "$(SHARED_REAL)" "$(DESTDIR)$(SHLIBDIR)"
+
+	# If we have ELF-style symlinks, recreate them at the install location.
+	@if [ "$(SHARED_SONAME)" != "" ]; then \
+		( cd "$(DESTDIR)$(SHLIBDIR)" && \
+		  ln -sf "$${SHARED_REAL##*/}" "$${SHARED_SONAME##*/}" && \
+		  ln -sf "$${SHARED_SONAME##*/}" "$${SHARED_LINK##*/}" ); \
+	fi
+
+install-pc:
+	@mkdir -p "$(DESTDIR)$(PKGCONFIGDIR)"
+	$(INSTALL_DATA) "$(PCFILE)" \
+	  "$(DESTDIR)$(PKGCONFIGDIR)/$(LIBNAME).pc"
+
+install-cmake:
+	@mkdir -p "$(DESTDIR)$(CMAKEDIR)"
+	$(INSTALL_DATA) "$(CMAKE_CONFIG)" \
+	  "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)Config.cmake"
+	$(INSTALL_DATA) "$(CMAKE_VERSION)" \
+	  "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)ConfigVersion.cmake"
+	$(INSTALL_DATA) "$(CMAKE_TARGETS)" \
+	  "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)Targets.cmake"
+
+# ---------------------------------------------------------------------------
+# Uninstall rules
+# ---------------------------------------------------------------------------
+#
+# Warning:
+#   Uninstall is best-effort and only removes files that this Makefile
+#   installed.
+
+uninstall-headers:
+	@for h in $(HEADERS); do \
+		b=$${h##*/}; \
+		rm -f "$(DESTDIR)$(INCLUDEDIR)/$$b"; \
+	done
+	@rmdir "$(DESTDIR)$(INCLUDEDIR)" 2>/dev/null || true
+
+uninstall-libs:
+	@rm -f "$(DESTDIR)$(LIBDIR)/$${STATIC_LIB##*/}"
+	@if [ "$(IMPLIB)" != "" ]; then \
+		rm -f "$(DESTDIR)$(LIBDIR)/$${IMPLIB##*/}"; \
+	fi
+	@rm -f "$(DESTDIR)$(SHLIBDIR)/$${SHARED_REAL##*/}"
+	@if [ "$(SHARED_SONAME)" != "" ]; then \
+		rm -f "$(DESTDIR)$(SHLIBDIR)/$${SHARED_SONAME##*/}"; \
+		rm -f "$(DESTDIR)$(SHLIBDIR)/$${SHARED_LINK##*/}"; \
+	fi
+
+uninstall-pc:
+	@rm -f "$(DESTDIR)$(PKGCONFIGDIR)/$(LIBNAME).pc"
+	@rmdir "$(DESTDIR)$(PKGCONFIGDIR)" 2>/dev/null || true
+
+uninstall-cmake:
+	@rm -f "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)Config.cmake" \
+	      "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)ConfigVersion.cmake" \
+	      "$(DESTDIR)$(CMAKEDIR)/$(LIBNAME)Targets.cmake"
+	@rmdir "$(DESTDIR)$(CMAKEDIR)" 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# Build rules
+# ---------------------------------------------------------------------------
+
+$(STATIC_LIB): $(OBJS)
+	@mkdir -p "$(BUILD_DIR)"
+	$(AR) rcs "$(STATIC_LIB)" $(OBJS)
+	-$(RANLIB) "$(STATIC_LIB)"
+
+# Build the real shared library.
+$(SHARED_REAL): $(OBJS)
+	@mkdir -p "$(BUILD_DIR)"
+	$(CC) $(LDFLAGS) $(SHLDFLAGS) $(SONAME_LDFLAGS) \
+	  -o "$(SHARED_REAL)" $(OBJS) $(LDLIBS)
+
+# Object compilation rules are generated by configure.
+# Each rule looks like:
+#   build/bibiconv/foo.o: bibiconv/foo.c
+#       mkdir -p build/bibiconv
+#       $(CC) ... -c $< -o $@
+@COMPILE_RULES@
+
+# ---------------------------------------------------------------------------
+# Cleanup
+# ---------------------------------------------------------------------------
+
+clean:
+	# Remove build outputs, but keep generated Makefile.
+	rm -f $(OBJS) "$(STATIC_LIB)" "$(IMPLIB)" "$(SHARED_REAL)"
+	rm -f "$(SHARED_SONAME)" "$(SHARED_LINK)"
+
+# Remove build outputs and generated Makefile.
+distclean: clean
+	rm -rf "$(BUILD_DIR)" Makefile

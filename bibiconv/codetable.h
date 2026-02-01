@@ -6,6 +6,7 @@
 #ifndef BIBICONV_CODETABLE_H
 #define BIBICONV_CODETABLE_H
 
+#include <stddef.h>
 #include <stdbool.h>
 #include <bibiconv/cfeatures.h>
 #include <bibiconv/chartypes.h>
