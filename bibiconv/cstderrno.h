@@ -13,12 +13,6 @@
 typedef int errno_t;
 #endif
 
-#ifndef __STDC_WANT_LIB_EXT1__
-#define __STDC_WANT_LIB_EXT1__ 1
 #include <errno.h>
-#undef __STDC_WANT_LIB_EXT1__
-#else
-#include <errno.h>
-#endif
 
 #endif /* BIBICONV_CSTDERRNO_H */
