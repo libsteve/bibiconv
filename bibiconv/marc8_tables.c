@@ -9,7 +9,7 @@
 #pragma mark - Basic Latin
 
 struct bib_iconv_charset const bib_iconv_marc8_basic_latin =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, 0x0000, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -54,7 +54,7 @@ struct bib_iconv_charset const bib_iconv_marc8_basic_latin =
 #pragma mark - Extended Latin
 
 struct bib_iconv_charset const bib_iconv_marc8_extended_latin =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -99,7 +99,7 @@ struct bib_iconv_charset const bib_iconv_marc8_extended_latin =
 #pragma mark - Greek Symbols
 
 struct bib_iconv_charset const bib_iconv_marc8_greek_symbols =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -144,7 +144,7 @@ struct bib_iconv_charset const bib_iconv_marc8_greek_symbols =
 #pragma mark - Subscript
 
 struct bib_iconv_charset const bib_iconv_marc8_subscript =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -189,7 +189,7 @@ struct bib_iconv_charset const bib_iconv_marc8_subscript =
 #pragma mark - Superscript
 
 struct bib_iconv_charset const bib_iconv_marc8_superscript =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -234,7 +234,7 @@ struct bib_iconv_charset const bib_iconv_marc8_superscript =
 #pragma mark - Basic Hebrew
 
 struct bib_iconv_charset const bib_iconv_marc8_basic_hebrew =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -279,7 +279,7 @@ struct bib_iconv_charset const bib_iconv_marc8_basic_hebrew =
 #pragma mark - Basic Cyrillic
 
 struct bib_iconv_charset const bib_iconv_marc8_basic_cyrillic =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -324,7 +324,7 @@ struct bib_iconv_charset const bib_iconv_marc8_basic_cyrillic =
 #pragma mark - Extended Cyrillic
 
 struct bib_iconv_charset const bib_iconv_marc8_extended_cyrillic =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -369,7 +369,7 @@ struct bib_iconv_charset const bib_iconv_marc8_extended_cyrillic =
 #pragma mark - Basic Arabic
 
 struct bib_iconv_charset const bib_iconv_marc8_basic_arabic =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -414,7 +414,7 @@ struct bib_iconv_charset const bib_iconv_marc8_basic_arabic =
 #pragma mark - Extended Arabic
 
 struct bib_iconv_charset const bib_iconv_marc8_extended_arabic =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -459,7 +459,7 @@ struct bib_iconv_charset const bib_iconv_marc8_extended_arabic =
 #pragma mark - Basic Greek
 
 struct bib_iconv_charset const bib_iconv_marc8_basic_greek =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
@@ -504,7 +504,7 @@ struct bib_iconv_charset const bib_iconv_marc8_basic_greek =
 #pragma mark - East Asian Characters
 
 struct bib_iconv_charset const bib_iconv_marc8_eacc =
-{ (union bib_iconv_code_table const){ .lookup_table = {
+{ { .lookup_table = {
     /* C0 char set: 0x00-0x1F */
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),
     R(NNNNNNNN, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR, NONCHR),

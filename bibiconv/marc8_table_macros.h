@@ -12,13 +12,13 @@
 #define NONCHR UCS4_NONCHAR
 
 /** Defines the unicode code point for a combining character. */
-#define C(UCS) (union bib_iconv_code_info){ .code_point = { 1, 1, (UCS) } }
+#define C(UCS) { .code_point = { 1, 1, (UCS) } }
 /** Defines the unicode code point for a non-combining character. */
-#define N(UCS) (union bib_iconv_code_info){ .code_point = { 1, 0, (UCS) } }
+#define N(UCS) { .code_point = { 1, 0, (UCS) } }
 /** Defines the index of the next trie span for a multi-byte set. */
-#define I(IDX) (union bib_iconv_code_info){ .span_index = { 0, 1, (IDX) } }
+#define I(IDX) { .span_index = { 0, 1, (IDX) } }
 /** Defines a value for use as an array terminator. */
-#define T(NA) (union bib_iconv_code_info){ .span_index = { 0, 0, 0x0000 } }
+#define T(NA) { .span_index = { 0, 0, 0x0000 } }
 
 #define R(SEQUENCE, _0, _1, _2, _3, _4, _5, _6, _7) \
     ROW_##SEQUENCE(_0, _1, _2, _3, _4, _5, _6, _7)
