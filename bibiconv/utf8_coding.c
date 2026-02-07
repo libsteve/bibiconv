@@ -11,6 +11,12 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#if BIBICONV_HAS_NULLPTR
+#define nullfun nullptr
+#else
+#define nullfun ((uintptr_t)0)
+#endif
+
 static size_t utf8_read(bib_iconv_t cd, bib_iconv_decoder_t d,
                         char const **restrict src, size_t *restrict srcleft,
                         ucs4_t *unicode) {
@@ -121,15 +127,15 @@ static size_t utf8_write(bib_iconv_t cd, struct bib_iconv_encoder_s *e,
 
 void bib_iconv_open_utf8_encoder(bib_iconv_encoder_t e) {
     e->context = nullptr;
-    e->init = nullptr;
+    e->init = nullfun;
     e->write = utf8_write;
-    e->flush = nullptr;
-    e->deinit = nullptr;
+    e->flush = nullfun;
+    e->deinit = nullfun;
 }
 
 void bib_iconv_open_utf8_decoder(bib_iconv_decoder_t d) {
     d->context = nullptr;
-    d->init = nullptr;
+    d->init = nullfun;
     d->read = utf8_read;
-    d->deinit = nullptr;
+    d->deinit = nullfun;
 }

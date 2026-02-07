@@ -14,6 +14,12 @@
 #include <ctype.h>
 #include <stdlib.h>
 
+#if BIBICONV_HAS_NULLPTR
+#define nullfun nullptr
+#else
+#define nullfun ((uintptr_t)0)
+#endif
+
 struct bib_iconv_s {
     struct bib_iconv_encoder_s encoder;
     struct bib_iconv_decoder_s decoder;
@@ -118,10 +124,10 @@ size_t bib_iconv(bib_iconv_t cd,
     }
 
     if (!cd->is_initialized) {
-        if (cd->encoder.init != nullptr) {
+        if (cd->encoder.init != nullfun) {
             cd->encoder.init(&cd->encoder);
         }
-        if (cd->decoder.init != nullptr) {
+        if (cd->decoder.init != nullfun) {
             size_t result = cd->decoder.init(cd, &cd->decoder, src, srcleft);
             if (result == (size_t)-1) {
                 return result;
@@ -143,7 +149,7 @@ size_t bib_iconv(bib_iconv_t cd,
                 cd->pending_write = 0;
                 cd->has_pending_write = false;
             }
-            if (cd->encoder.flush != nullptr) {
+            if (cd->encoder.flush != nullfun) {
                 size_t r = cd->encoder.flush(cd, &cd->encoder, dst, dstleft);
                 if (r == (size_t)-1) {
                     return r;
@@ -202,10 +208,10 @@ int bib_iconv_close(bib_iconv_t cd) {
     if (cd == nullptr) {
         return 0;
     }
-    if (cd->encoder.deinit != nullptr) {
+    if (cd->encoder.deinit != nullfun) {
         cd->encoder.deinit(&cd->encoder);
     }
-    if (cd->decoder.deinit != nullptr) {
+    if (cd->decoder.deinit != nullfun) {
         cd->decoder.deinit(&cd->decoder);
     }
     free(cd);
