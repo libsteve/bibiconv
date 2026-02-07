@@ -171,10 +171,12 @@ typedef union bib_iconv_code_info {
     struct bib_iconv_span_index span_index;
 } bib_iconv_code_info_t;
 
+#if BIBICONV_HAS_STATIC_ASSERT
 static_assert(sizeof(bib_iconv_code_info_t) == sizeof(bib_iconv_code_point_t),
               "iconv map structures are not properly sized");
 static_assert(sizeof(bib_iconv_code_info_t) == sizeof(bib_iconv_span_index_t),
               "iconv map structures are not properly sized");
+#endif /* BIBICONV_HAS_STATIC_ASSERT */
 
 /**
  * Identifies the mapping of a code unit to a Unicode code point in an array.
